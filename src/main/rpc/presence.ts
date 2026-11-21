@@ -40,6 +40,25 @@ const HOVER_TEXT = 'discord.gg/kaliapp'
 const PARTY_PHASES = new Set(['Lobby', 'Matchmaking', 'ReadyCheck', 'ChampSelect'])
 const PARTY_TTL_MS = 4000
 
+/** Queue id -> display name (for the lobby/queue presence). */
+const QUEUE_NAMES: Record<number, string> = {
+  420: 'Ranked Solo/Duo',
+  440: 'Ranked Flex',
+  400: 'Normal Draft',
+  430: 'Normal Blind',
+  450: 'ARAM',
+  490: 'Quickplay',
+  480: 'Swiftplay',
+  700: 'Clash',
+  720: 'ARAM Clash',
+  900: 'ARURF',
+  1700: 'Arena',
+  1900: 'URF',
+  830: 'Co-op vs. AI',
+  840: 'Co-op vs. AI',
+  850: 'Co-op vs. AI'
+}
+
 /**
  * Turns Kali's LCU state into a Discord Rich Presence and keeps it in sync, reconnecting to Discord
  * on its own. Images are Community Dragon URLs (no asset uploads / tokens needed).
@@ -53,6 +72,7 @@ export class PresenceManager {
   private lastActivityJson = ''
   private status: RpcStatus = INITIAL_RPC_STATUS
   private party = { size: 0, max: 0, at: 0 }
+  private lobbyQueue: string | null = null
 
   constructor(
     private readonly onStatus: (status: RpcStatus) => void,
@@ -104,9 +124,10 @@ export class PresenceManager {
   }
 
   private async refreshParty(state: PresenceState): Promise<void> {
-    if (!this.settings.enabled || !this.settings.showParty || !PARTY_PHASES.has(state.phase)) {
-      if (this.party.size !== 0) {
+    if (!this.settings.enabled || !PARTY_PHASES.has(state.phase)) {
+      if (this.party.size !== 0 || this.lobbyQueue !== null) {
         this.party = { size: 0, max: 0, at: 0 }
+        this.lobbyQueue = null
         this.rebuild()
       }
       return
@@ -118,16 +139,18 @@ export class PresenceManager {
     try {
       const lobby = await client.request<{
         members?: unknown[]
-        gameConfig?: { maxLobbySize?: number }
+        gameConfig?: { maxLobbySize?: number; queueId?: number }
       }>('GET', '/lol-lobby/v2/lobby')
       const size = lobby?.members?.length ?? 0
       const max = lobby?.gameConfig?.maxLobbySize ?? size
-      if (size !== this.party.size || max !== this.party.max) {
+      const queue = QUEUE_NAMES[lobby?.gameConfig?.queueId ?? -1] ?? null
+      if (size !== this.party.size || max !== this.party.max || queue !== this.lobbyQueue) {
         this.party = { size, max, at: Date.now() }
+        this.lobbyQueue = queue
         this.rebuild()
       }
     } catch {
-      // Not in a lobby (solo queue dodge etc.): leave party as-is.
+      // Not in a lobby (solo queue dodge etc.): leave as-is.
     }
   }
 
@@ -191,6 +214,16 @@ export class PresenceManager {
     const timer = cfg.showTimer ? { start: this.phaseSince } : undefined
     const idleLarge = profile ? profileIcon(profile.profileIconId) : undefined
     const idleAssets = { large_image: idleLarge, large_text: HOVER_TEXT, ...rank }
+    // In the lobby/queue the big image is your ranked crest, and the queue name shows as the state.
+    const rankedQueue = profile?.ranked
+      ? cfg.rankQueue === 'flex'
+        ? profile.ranked.flex
+        : profile.ranked.solo
+      : null
+    const lobbyAssets = {
+      large_image: rankedQueue?.tier ? rankEmblem(rankedQueue.tier) : idleLarge,
+      large_text: rankedQueue?.tier ? this.rankText(rankedQueue) : HOVER_TEXT
+    }
     const party =
       cfg.showParty && this.party.size > 1
         ? { size: [this.party.size, Math.max(this.party.max, this.party.size)] as [number, number] }
@@ -205,11 +238,23 @@ export class PresenceManager {
 
     switch (state.phase) {
       case 'Lobby':
-        return withButton({ details: 'In the lobby', timestamps: timer, assets: idleAssets, party })
+        return withButton({
+          details: 'In the lobby',
+          state: this.lobbyQueue ?? undefined,
+          timestamps: timer,
+          assets: lobbyAssets,
+          party
+        })
       case 'Matchmaking':
-        return withButton({ details: 'In queue', timestamps: timer, assets: idleAssets, party })
+        return withButton({
+          details: 'In queue',
+          state: this.lobbyQueue ?? undefined,
+          timestamps: timer,
+          assets: lobbyAssets,
+          party
+        })
       case 'ReadyCheck':
-        return withButton({ details: 'Match found', timestamps: timer, assets: idleAssets })
+        return withButton({ details: 'Match found', timestamps: timer, assets: lobbyAssets })
       case 'ChampSelect': {
         const champ = state.lobby?.players.find((p) => p.isLocalPlayer)?.champion
         const large = this.largeImage(champ?.id ?? 0, champ?.name ?? '', champ?.skinId ?? 0, '', idleLarge)
