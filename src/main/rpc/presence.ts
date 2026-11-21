@@ -33,6 +33,12 @@ const splashArt = (championId: number, skinId: number): string => {
 
 const capitalize = (value: string): string => value.charAt(0) + value.slice(1).toLowerCase()
 
+/** Convert an LCU game-data asset path to its public Community Dragon URL. */
+function modeIconUrl(assetPath: string): string {
+  const rel = assetPath.replace(/^\/?lol-game-data\/assets\//i, '').toLowerCase()
+  return `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/${rel}`
+}
+
 // Shown when hovering the large image (the app/brand); the bold line above it is the Discord
 // application's name, which the user sets on the dev portal (e.g. "League of Legends").
 const HOVER_TEXT = 'discord.gg/kaliapp'
@@ -73,6 +79,8 @@ export class PresenceManager {
   private status: RpcStatus = INITIAL_RPC_STATUS
   private party = { size: 0, max: 0, at: 0 }
   private lobbyQueue: string | null = null
+  private modeIcon: string | null = null
+  private modeIconMapId = 0
 
   constructor(
     private readonly onStatus: (status: RpcStatus) => void,
@@ -125,9 +133,11 @@ export class PresenceManager {
 
   private async refreshParty(state: PresenceState): Promise<void> {
     if (!this.settings.enabled || !PARTY_PHASES.has(state.phase)) {
-      if (this.party.size !== 0 || this.lobbyQueue !== null) {
+      if (this.party.size !== 0 || this.lobbyQueue !== null || this.modeIcon !== null) {
         this.party = { size: 0, max: 0, at: 0 }
         this.lobbyQueue = null
+        this.modeIcon = null
+        this.modeIconMapId = 0
         this.rebuild()
       }
       return
@@ -139,12 +149,30 @@ export class PresenceManager {
     try {
       const lobby = await client.request<{
         members?: unknown[]
-        gameConfig?: { maxLobbySize?: number; queueId?: number }
+        gameConfig?: { maxLobbySize?: number; queueId?: number; mapId?: number }
       }>('GET', '/lol-lobby/v2/lobby')
       const size = lobby?.members?.length ?? 0
       const max = lobby?.gameConfig?.maxLobbySize ?? size
       const queue = QUEUE_NAMES[lobby?.gameConfig?.queueId ?? -1] ?? null
-      if (size !== this.party.size || max !== this.party.max || queue !== this.lobbyQueue) {
+      let changed = size !== this.party.size || max !== this.party.max || queue !== this.lobbyQueue
+
+      const mapId = lobby?.gameConfig?.mapId ?? 0
+      if (mapId && mapId !== this.modeIconMapId) {
+        this.modeIconMapId = mapId
+        changed = true
+        try {
+          const map = await client.request<{ assets?: Record<string, string> }>(
+            'GET',
+            `/lol-maps/v2/map/${mapId}`
+          )
+          const asset = map?.assets?.['game-select-icon-default']
+          this.modeIcon = asset ? modeIconUrl(asset) : null
+        } catch {
+          this.modeIcon = null
+        }
+      }
+
+      if (changed) {
         this.party = { size, max, at: Date.now() }
         this.lobbyQueue = queue
         this.rebuild()
@@ -214,15 +242,12 @@ export class PresenceManager {
     const timer = cfg.showTimer ? { start: this.phaseSince } : undefined
     const idleLarge = profile ? profileIcon(profile.profileIconId) : undefined
     const idleAssets = { large_image: idleLarge, large_text: HOVER_TEXT, ...rank }
-    // In the lobby/queue the big image is your ranked crest, and the queue name shows as the state.
-    const rankedQueue = profile?.ranked
-      ? cfg.rankQueue === 'flex'
-        ? profile.ranked.flex
-        : profile.ranked.solo
-      : null
+    // In the lobby/queue: big image = the game-mode icon (Summoner's Rift / ARAM / Arena…),
+    // small image = your rank, and the queue name shows as the state line.
     const lobbyAssets = {
-      large_image: rankedQueue?.tier ? rankEmblem(rankedQueue.tier) : idleLarge,
-      large_text: rankedQueue?.tier ? this.rankText(rankedQueue) : HOVER_TEXT
+      large_image: this.modeIcon ?? idleLarge,
+      large_text: this.lobbyQueue ?? 'League of Legends',
+      ...rank
     }
     const party =
       cfg.showParty && this.party.size > 1
