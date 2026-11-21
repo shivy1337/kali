@@ -7,6 +7,9 @@ import type { UpdateStatus } from './update'
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected'
 
+/** Fixed sidebar links, resolved to real URLs / paths in the main process. */
+export type ExternalLink = 'discord' | 'website' | 'logs'
+
 /**
  * Client gameflow phase as reported by the LCU: "None", "Lobby", "Matchmaking", "ReadyCheck",
  * "ChampSelect", "GameStart", "InProgress", "WaitingForStats", "PreEndOfGame", "EndOfGame",
@@ -195,6 +198,8 @@ export interface KaliApi {
   /** Full champion list (id, name, roles) for the automation pick lists. */
   getChampions(): Promise<ChampionSummary[]>
   copyText(text: string): Promise<void>
+  /** Open a fixed app link in the browser / file explorer (the targets are resolved in main). */
+  openLink(target: ExternalLink): void
   /** Open a team multi-search for these Riot IDs ("name#tag") in the default browser. */
   openMultiSearch(provider: LookupProvider, region: string, riotIds: string[]): Promise<void>
   /** Open one player's profile on the lookup site in the default browser. */
@@ -240,6 +245,7 @@ export const IPC = {
   getAsset: 'kali:get-asset',
   getChampions: 'kali:get-champions',
   copyText: 'kali:copy-text',
+  openLink: 'kali:open-link',
   openMultiSearch: 'kali:open-multi-search',
   openPlayerProfile: 'kali:open-player-profile',
   automationGet: 'kali:automation-get',

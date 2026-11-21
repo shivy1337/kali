@@ -1,17 +1,16 @@
 import logoUrl from '../../../../resources/icon.png'
+import type { ExternalLink } from '../../../shared/types'
 import { PAGES, type PageId } from '../../pages'
 import { BrandIcon, type BrandName } from '../ui/BrandIcon'
 import { Icon, type IconName } from '../ui/Icon'
-import { Tooltip } from '../ui/Tooltip'
 
 const ITEM =
   'no-drag flex h-9 w-full items-center gap-3 rounded-md px-3 text-[13px] transition-colors duration-150'
 
-// Placeholders: no log folder / URLs are configured yet, so these do nothing for now.
-const LINKS: { label: string; icon: IconName; brand?: BrandName }[] = [
-  { label: 'Logs', icon: 'logs' },
-  { label: 'Discord', icon: 'chat', brand: 'discord' },
-  { label: 'Website', icon: 'globe' }
+const LINKS: { label: string; icon: IconName; brand?: BrandName; target: ExternalLink }[] = [
+  { label: 'Logs', icon: 'logs', target: 'logs' },
+  { label: 'Discord', icon: 'chat', brand: 'discord', target: 'discord' },
+  { label: 'Website', icon: 'globe', target: 'website' }
 ]
 
 export function Sidebar({
@@ -61,20 +60,19 @@ export function Sidebar({
 
       <div className="flex flex-col gap-0.5 px-2 pb-2">
         {LINKS.map((link) => (
-          <Tooltip key={link.label} label="Not set up yet" side="right">
-            <button
-              type="button"
-              aria-disabled="true"
-              className={`${ITEM} !h-8 text-xs text-muted hover:bg-elevated hover:text-primary`}
-            >
-              {link.brand ? (
-                <BrandIcon name={link.brand} size={14} />
-              ) : (
-                <Icon name={link.icon} size={14} />
-              )}
-              {link.label}
-            </button>
-          </Tooltip>
+          <button
+            key={link.label}
+            type="button"
+            onClick={() => window.kali.openLink(link.target)}
+            className={`${ITEM} !h-8 text-xs text-muted hover:bg-elevated hover:text-primary`}
+          >
+            {link.brand ? (
+              <BrandIcon name={link.brand} size={14} />
+            ) : (
+              <Icon name={link.icon} size={14} />
+            )}
+            {link.label}
+          </button>
         ))}
       </div>
       <div className="border-t border-border px-5 py-3 font-mono text-[11px] text-muted">

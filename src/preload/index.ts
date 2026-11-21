@@ -32,6 +32,7 @@ const api: KaliApi = {
   getAsset: (kind, key) => ipcRenderer.invoke(IPC.getAsset, kind, key),
   getChampions: () => ipcRenderer.invoke(IPC.getChampions),
   copyText: (text) => ipcRenderer.invoke(IPC.copyText, text),
+  openLink: (target) => ipcRenderer.send(IPC.openLink, target),
   openMultiSearch: (provider, region, riotIds) =>
     ipcRenderer.invoke(IPC.openMultiSearch, provider, region, riotIds),
   openPlayerProfile: (provider, region, riotId) =>

@@ -2,7 +2,7 @@ import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage, shell, Tray 
 import { join } from 'node:path'
 import iconPath from '../../resources/icon.png?asset'
 import { INITIAL_QUEUE_STATUS, type QueueStatus } from '../shared/automation'
-import { INITIAL_RPC_STATUS, type RpcStatus } from '../shared/rpc'
+import { DISCORD_INVITE, INITIAL_RPC_STATUS, type RpcStatus } from '../shared/rpc'
 import { INITIAL_UPDATE_STATUS, type UpdateStatus } from '../shared/update'
 import { IPC, type AssetKind, type KaliSnapshot } from '../shared/types'
 import { Updater } from './updater'
@@ -230,6 +230,11 @@ function registerIpc(): void {
   ipcMain.handle(IPC.openPlayerProfile, async (_event, provider: unknown, region: unknown, id: unknown) => {
     const url = profileUrl(provider, region, id)
     if (url) await shell.openExternal(url)
+  })
+  ipcMain.on(IPC.openLink, (_event, target: unknown) => {
+    if (target === 'discord') void shell.openExternal(DISCORD_INVITE)
+    else if (target === 'website') void shell.openExternal('https://github.com/shivy1337/kali')
+    else if (target === 'logs') void shell.openPath(app.getPath('userData'))
   })
   ipcMain.on(IPC.windowMinimize, (event) => BrowserWindow.fromWebContents(event.sender)?.minimize())
   ipcMain.on(IPC.windowToggleMaximize, (event) => {
