@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage, shell, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shell, Tray } from 'electron'
 import { join } from 'node:path'
 import iconPath from '../../resources/icon.png?asset'
 import { INITIAL_QUEUE_STATUS, type QueueStatus } from '../shared/automation'
@@ -20,6 +20,10 @@ app.setAppUserModelId('kali')
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
+let resolveWindowReady!: () => void
+const windowReady = new Promise<void>((resolve) => {
+  resolveWindowReady = resolve
+})
 
 function send(channel: string, payload: unknown): void {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload)
@@ -111,11 +115,9 @@ function createWindow(): void {
     }
   })
 
-  // Launched at login with --hidden: stay in the tray, ready to catch League, without popping up.
-  const startHidden = process.argv.includes('--hidden')
-  mainWindow.once('ready-to-show', () => {
-    if (!startHidden) mainWindow?.show()
-  })
+  // The window is revealed by startup() once the update check (and any popup) is done, so the
+  // "new version" prompt can appear before the app itself opens.
+  mainWindow.once('ready-to-show', () => resolveWindowReady())
   mainWindow.on('maximize', () => send(IPC.maximized, true))
   mainWindow.on('unmaximize', () => send(IPC.maximized, false))
   // Close-to-tray: hide instead of closing, unless the user is really quitting.
@@ -155,6 +157,40 @@ function showWindow(): void {
   if (mainWindow.isMinimized()) mainWindow.restore()
   mainWindow.show()
   mainWindow.focus()
+}
+
+/**
+ * Starts the League watcher and, before the main window appears, checks for a new version. If one
+ * is available it asks in a native popup (Download / Skip) — then reveals the app.
+ */
+async function startup(): Promise<void> {
+  lcu.start()
+
+  // Launched at login with --hidden: stay in the tray without popping up; check quietly instead.
+  if (process.argv.includes('--hidden')) {
+    updater.check()
+    return
+  }
+
+  const update = await updater.checkOnStartup()
+  if (update.available) {
+    const choice = dialog.showMessageBoxSync({
+      type: 'info',
+      noLink: true,
+      title: 'Kali',
+      message: 'A new version is ready to download',
+      detail: `Kali ${update.version} is available. Download it now?`,
+      buttons: ['Download', 'Skip'],
+      defaultId: 0,
+      cancelId: 1
+    })
+    if (choice === 0) updater.download()
+    else updater.dismiss()
+  }
+
+  await windowReady
+  mainWindow?.show()
+  mainWindow?.focus()
 }
 
 function createTray(): void {
@@ -267,9 +303,7 @@ if (!app.requestSingleInstanceLock()) {
     registerIpc()
     createTray()
     createWindow()
-    lcu.start()
-    // Check for updates right after launch (and only in the packaged app).
-    setTimeout(() => updater.check(), 1200)
+    void startup()
   })
 
   app.on('window-all-closed', () => {
