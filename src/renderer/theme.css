@@ -1,0 +1,103 @@
+@import 'tailwindcss';
+
+/*
+ * Kali theme — navy + royal blue, white, gold, small red accents.
+ * These are the only colours available as Tailwind utilities
+ * (bg-base, bg-surface, text-primary, text-muted, border-border, text-gold, ...).
+ *
+ * Note: because `base` is a colour here, `text-base` sets a navy text colour as well as a
+ * font size. Use explicit sizes (text-[16px]) instead of `text-base`.
+ */
+@theme {
+  --color-*: initial;
+
+  --color-base: #070b16;
+  --color-surface: #0d1326;
+  --color-elevated: #141c35;
+  --color-border: #1f2a4a;
+  --color-border-hover: #2c3a63;
+
+  --color-primary: #f4f6fb;
+  --color-muted: #8792b5;
+
+  --color-accent: #2f6bff;
+  --color-accent-hover: #4d82ff;
+  --color-accent-soft: rgba(47, 107, 255, 0.14);
+
+  --color-cyan: #35d8f5; /* connected / live */
+  --color-gold: #e3b341; /* Master+ ranks, LP */
+  --color-red: #e23a4a; /* disconnected */
+  --color-success: #3ddc97;
+  --color-warning: #f5a742;
+
+  /* Rank tiers (fallback badge + underline) */
+  --color-tier-iron: #7a7f8c;
+  --color-tier-bronze: #b0744a;
+  --color-tier-silver: #b4bccb;
+  --color-tier-gold: #e3b341;
+  --color-tier-platinum: #3fc1b0;
+  --color-tier-emerald: #3ddc97;
+  --color-tier-diamond: #4d82ff;
+  --color-tier-master: #a66bff;
+  --color-tier-grandmaster: #e23a4a;
+  --color-tier-challenger: #e3b341;
+  --color-tier-challenger-2: #35d8f5;
+
+  /* Display serif for headings, tier names and buttons (font-display). */
+  --font-display: 'Cinzel Variable', 'Cinzel', Georgia, serif;
+  --font-sans: 'Inter Variable', 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', Consolas, monospace;
+
+  --radius-card: 8px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--color-base);
+  color: var(--color-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+button {
+  cursor: pointer;
+}
+button:disabled,
+button[aria-disabled='true'] {
+  cursor: default;
+}
+
+/* Keyboard focus ring in accent, everywhere. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Frameless window: regions that move the window vs. regions that take clicks. */
+.drag {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border: 3px solid var(--color-base);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-hover);
+}
