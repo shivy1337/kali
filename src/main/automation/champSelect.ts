@@ -147,7 +147,7 @@ export class ChampSelectAutomation {
     role: Role | null,
     timeLeft: number
   ): Promise<void> {
-    if (this.acted.has(id) || this.inFlight.has(id)) return
+    if (this.inFlight.has(id)) return
     const client = this.getClient()
     if (!client) return
 
