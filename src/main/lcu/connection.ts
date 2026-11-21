@@ -30,6 +30,7 @@ import { EmblemStore } from './emblems'
 import { InsightsFetcher } from './insights'
 import { LobbyTracker, type LcuChampSelectSession } from './lobby'
 import { fetchImage, ProfileFetcher } from './profile'
+import { RiotClient } from './riotClient'
 import { LcuSocket, type LcuEvent } from './socket'
 
 const POLL_MS = 2000
@@ -82,6 +83,7 @@ export class LcuConnection {
   private readonly automation: AutomationEngine
   private readonly champSelectAuto: ChampSelectAutomation
   private readonly liveGameTracker: LiveGameTracker
+  private readonly riot = new RiotClient()
   private readonly itemIcons = new Map<number, string>()
   private itemPaths: Map<number, string> | null = null
   private automationSettings: AutomationSettings = DEFAULT_AUTOMATION
@@ -97,6 +99,7 @@ export class LcuConnection {
       this.profiles,
       this.champions,
       new InsightsFetcher(this.champions),
+      this.riot,
       (lobby) => this.events.onLobby(lobby),
       (lobby) => this.events.onLobbyFinished(lobby)
     )

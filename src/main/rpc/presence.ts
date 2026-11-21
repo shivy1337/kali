@@ -26,9 +26,9 @@ const profileIcon = (id: number): string =>
   `${CDN}/rcp-be-lol-game-data/global/default/v1/profile-icons/${id}.jpg`
 const rankEmblem = (tier: string): string =>
   `${CDN}/rcp-fe-lol-shared-components/global/default/${tier.toLowerCase()}.png`
-const splashArt = (championId: number, skinId: number): string => {
+const skinTile = (championId: number, skinId: number): string => {
   const num = skinId >= 1000 ? skinId % 1000 : skinId // champ select gives full ids, live gives the number
-  return `https://cdn.communitydragon.org/latest/champion/${championId}/splash-art/skin/${num}`
+  return `https://cdn.communitydragon.org/latest/champion/${championId}/tile/skin/${num}`
 }
 
 const capitalize = (value: string): string => value.charAt(0) + value.slice(1).toLowerCase()
@@ -79,6 +79,7 @@ export class PresenceManager {
   private status: RpcStatus = INITIAL_RPC_STATUS
   private party = { size: 0, max: 0, at: 0 }
   private lobbyQueue: string | null = null
+  private mapName: string | null = null
   private modeIcon: string | null = null
   private modeIconMapId = 0
 
@@ -136,6 +137,7 @@ export class PresenceManager {
       if (this.party.size !== 0 || this.lobbyQueue !== null || this.modeIcon !== null) {
         this.party = { size: 0, max: 0, at: 0 }
         this.lobbyQueue = null
+        this.mapName = null
         this.modeIcon = null
         this.modeIconMapId = 0
         this.rebuild()
@@ -161,14 +163,16 @@ export class PresenceManager {
         this.modeIconMapId = mapId
         changed = true
         try {
-          const map = await client.request<{ assets?: Record<string, string> }>(
+          const map = await client.request<{ name?: string; assets?: Record<string, string> }>(
             'GET',
             `/lol-maps/v2/map/${mapId}`
           )
           const asset = map?.assets?.['game-select-icon-default']
           this.modeIcon = asset ? modeIconUrl(asset) : null
+          this.mapName = map?.name ?? null
         } catch {
           this.modeIcon = null
+          this.mapName = null
         }
       }
 
@@ -223,9 +227,9 @@ export class PresenceManager {
     skinName: string,
     idleLarge?: string
   ): Pick<NonNullable<DiscordActivity['assets']>, 'large_image' | 'large_text'> {
-    // The skin/champion name goes in the hover tooltip when known, otherwise the brand.
+    // Square champion/skin tile (not the wide splash). Hover tooltip shows the skin/champ name.
     if (this.settings.useSkinSplash && championId > 0) {
-      return { large_image: splashArt(championId, skinId), large_text: skinName || championName }
+      return { large_image: skinTile(championId, skinId), large_text: skinName || championName }
     }
     if (this.settings.showChampion && championId > 0) {
       return { large_image: championIcon(championId), large_text: championName }
@@ -261,30 +265,41 @@ export class PresenceManager {
       return activity
     }
 
+    // "Summoner's Rift (Ranked Solo/Duo)" — the map + queue, like the client's own presence.
+    const mapQueue =
+      this.mapName && this.lobbyQueue
+        ? `${this.mapName} (${this.lobbyQueue})`
+        : (this.lobbyQueue ?? this.mapName ?? undefined)
+
     switch (state.phase) {
       case 'Lobby':
         return withButton({
-          details: 'In the lobby',
-          state: this.lobbyQueue ?? undefined,
+          details: mapQueue ?? 'In the lobby',
+          state: 'In Lobby',
           timestamps: timer,
           assets: lobbyAssets,
           party
         })
       case 'Matchmaking':
+        // No "In Queue" text — the elapsed timer already says you're queuing.
         return withButton({
-          details: 'In queue',
-          state: this.lobbyQueue ?? undefined,
+          details: mapQueue ?? 'In queue',
           timestamps: timer,
           assets: lobbyAssets,
           party
         })
       case 'ReadyCheck':
-        return withButton({ details: 'Match found', timestamps: timer, assets: lobbyAssets })
+        return withButton({
+          details: mapQueue ?? 'Match found',
+          state: 'Match found',
+          timestamps: timer,
+          assets: lobbyAssets
+        })
       case 'ChampSelect': {
         const champ = state.lobby?.players.find((p) => p.isLocalPlayer)?.champion
         const large = this.largeImage(champ?.id ?? 0, champ?.name ?? '', champ?.skinId ?? 0, '', idleLarge)
         return withButton({
-          details: state.lobby?.queueName ?? 'Champ select',
+          details: mapQueue ?? state.lobby?.queueName ?? 'Champ select',
           state: champ?.name ? `Champ select · ${champ.name}` : 'In champ select',
           timestamps: timer,
           assets: { ...large, ...rank },

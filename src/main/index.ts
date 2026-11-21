@@ -268,8 +268,8 @@ if (!app.requestSingleInstanceLock()) {
     createTray()
     createWindow()
     lcu.start()
-    // Check for updates shortly after launch (and only in the packaged app).
-    setTimeout(() => updater.check(), 4000)
+    // Check for updates right after launch (and only in the packaged app).
+    setTimeout(() => updater.check(), 1200)
   })
 
   app.on('window-all-closed', () => {

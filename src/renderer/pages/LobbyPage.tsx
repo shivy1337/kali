@@ -26,7 +26,12 @@ export function LobbyPage({
 
       {/* Live game and champ select are the focus when active, so they go first. */}
       {liveGame && (
-        <LiveGameView game={liveGame} localPuuid={profile?.puuid ?? null} className="col-span-full" />
+        <LiveGameView
+          game={liveGame}
+          localPuuid={profile?.puuid ?? null}
+          region={profile?.region ?? null}
+          className="col-span-full"
+        />
       )}
       {lobby && <ChampSelectPanel lobby={lobby} className="col-span-full" />}
 

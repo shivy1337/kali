@@ -126,10 +126,10 @@ export function RpcPage() {
 
       <Section title="What to show">
         <Row
-          title="Skin splash"
-          description="Use your skin's splash art + name as the big image."
+          title="Skin art"
+          description="Use your skin's tile + name as the big image (falls back to the champion icon)."
           disabled={off}
-          control={sw('useSkinSplash', 'Skin splash')}
+          control={sw('useSkinSplash', 'Skin art')}
         />
         <Row
           title="Champion"

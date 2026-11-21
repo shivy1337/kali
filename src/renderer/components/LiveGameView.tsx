@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import type { LiveGame, LivePlayer } from '../../shared/types'
 import { tierName } from '../lib/format'
 import { positionLabel } from '../lib/phase'
 import { tierStyle } from '../lib/tiers'
 import { useAsset } from '../lib/useAsset'
 import { ItemRow } from './ItemRow'
+import { LivePlayerModal } from './LivePlayerModal'
 import { Pill } from './ui/Pill'
 import { TierImage } from './ui/RankEmblem'
 
@@ -67,12 +69,24 @@ function ChampCell({ player }: { player: LivePlayer }) {
   )
 }
 
-function PlayerRow({ player, isLocal }: { player: LivePlayer; isLocal: boolean }) {
+function PlayerRow({
+  player,
+  isLocal,
+  onOpen
+}: {
+  player: LivePlayer
+  isLocal: boolean
+  onOpen: () => void
+}) {
   const pos = positionLabel(player.position)
   return (
-    <div
-      className={`flex items-center gap-3 rounded-md border px-2.5 py-1.5 ${
-        isLocal ? 'border-accent/60 bg-accent-soft' : 'border-transparent hover:bg-surface'
+    <button
+      type="button"
+      onClick={onOpen}
+      className={`no-drag flex w-full items-center gap-3 rounded-md border px-2.5 py-1.5 text-left transition-colors duration-150 ${
+        isLocal
+          ? 'border-accent/60 bg-accent-soft hover:bg-accent-soft/80'
+          : 'border-transparent hover:border-border-hover hover:bg-surface'
       }`}
     >
       <ChampCell player={player} />
@@ -95,7 +109,7 @@ function PlayerRow({ player, isLocal }: { player: LivePlayer; isLocal: boolean }
         <div className="font-mono text-[10px] text-muted">{player.creepScore} CS</div>
       </div>
       <ItemRow items={player.items} />
-    </div>
+    </button>
   )
 }
 
@@ -103,12 +117,14 @@ function Team({
   title,
   players,
   localPuuid,
-  tone
+  tone,
+  onOpen
 }: {
   title: string
   players: LivePlayer[]
   localPuuid: string | null
   tone: string
+  onOpen: (player: LivePlayer) => void
 }) {
   return (
     <div>
@@ -119,6 +135,7 @@ function Team({
             key={`${player.side}-${player.championId}`}
             player={player}
             isLocal={!!localPuuid && player.puuid === localPuuid}
+            onOpen={() => onOpen(player)}
           />
         ))}
       </div>
@@ -130,14 +147,20 @@ function Team({
 export function LiveGameView({
   game,
   localPuuid,
+  region,
   className = ''
 }: {
   game: LiveGame
   localPuuid: string | null
+  region: string | null
   className?: string
 }) {
+  const [openKey, setOpenKey] = useState<string | null>(null)
   const your = byRole(game.players.filter((p) => p.side === 'your'))
   const enemy = byRole(game.players.filter((p) => p.side === 'enemy'))
+  const keyOf = (p: LivePlayer): string => `${p.side}-${p.championId}`
+  // Look the open player up each render so the modal follows live KDA/item updates.
+  const open = game.players.find((p) => keyOf(p) === openKey)
 
   return (
     <section
@@ -151,9 +174,25 @@ export function LiveGameView({
         </Pill>
       </div>
       <div className="flex flex-col gap-3">
-        <Team title="Your team" players={your} localPuuid={localPuuid} tone="text-cyan" />
-        <Team title="Enemy team" players={enemy} localPuuid={localPuuid} tone="text-red" />
+        <Team
+          title="Your team"
+          players={your}
+          localPuuid={localPuuid}
+          tone="text-cyan"
+          onOpen={(p) => setOpenKey(keyOf(p))}
+        />
+        <Team
+          title="Enemy team"
+          players={enemy}
+          localPuuid={localPuuid}
+          tone="text-red"
+          onOpen={(p) => setOpenKey(keyOf(p))}
+        />
       </div>
+
+      {open && (
+        <LivePlayerModal player={open} region={region} onClose={() => setOpenKey(null)} />
+      )}
     </section>
   )
 }

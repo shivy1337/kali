@@ -9,7 +9,8 @@ import type { ChampionData } from './champions'
 import type { LcuClient } from './client'
 import type { InsightsFetcher } from './insights'
 import type { ProfileFetcher } from './profile'
-import { ChampSelectReveal, type RevealData, type RevealId } from './reveal'
+import { ChampSelectReveal, type RevealId } from './reveal'
+import type { RiotClient } from './riotClient'
 
 interface PlayerLookup {
   profile: Profile | null
@@ -66,32 +67,27 @@ function lastPickSide(session: LcuChampSelectSession): 'your' | 'enemy' | null {
 /** Decide which real identity (if any) belongs to each champ-select cell. */
 function assignReveals(
   myTeam: LcuChampSelectPlayer[],
-  data: RevealData
+  roster: RevealId[]
 ): Map<number, RevealId> {
   const assigned = new Map<number, RevealId>()
   const used = new Set<string>()
 
-  // Exact: cells with a real puuid, or a hidden cell whose obfuscated id the chat bridged.
+  // Exact: cells the client gives a real puuid for (you + premades) matched to the chat roster.
   for (const player of myTeam) {
     const cellId = player.cellId ?? -1
-    let id: RevealId | undefined
     if (player.puuid && player.puuid !== EMPTY_PUUID) {
-      id = data.roster.find((r) => r.puuid === player.puuid) ?? {
+      const id = roster.find((r) => r.puuid === player.puuid) ?? {
         puuid: player.puuid,
         gameName: player.gameName ?? '',
         tagLine: player.tagLine ?? ''
       }
-    } else if (player.obfuscatedPuuid) {
-      id = data.byObfuscated.get(player.obfuscatedPuuid)
-    }
-    if (id) {
       assigned.set(cellId, id)
       used.add(id.puuid)
     }
   }
 
-  // Fallback: hand the still-unmatched roster names to the remaining hidden cells, in order.
-  const leftover = data.roster.filter((r) => !used.has(r.puuid))
+  // Hidden (ranked-anonymised) cells: hand them the remaining revealed roster, in order.
+  const leftover = roster.filter((r) => !used.has(r.puuid))
   let next = 0
   for (const player of myTeam) {
     const cellId = player.cellId ?? -1
@@ -141,7 +137,7 @@ export class LobbyTracker {
 
   private profileCache = new Map<string, Promise<PlayerLookup>>()
   private queueName: Promise<string | null> | null = null
-  private readonly reveal = new ChampSelectReveal()
+  private readonly reveal: ChampSelectReveal
   private startedAt = 0
   private sequence = 0
 
@@ -149,9 +145,12 @@ export class LobbyTracker {
     private readonly profiles: ProfileFetcher,
     private readonly champions: ChampionData,
     private readonly insights: InsightsFetcher,
+    riot: RiotClient,
     private readonly onChange: (lobby: Lobby | null) => void,
     private readonly onFinished: (lobby: Lobby) => void
-  ) {}
+  ) {
+    this.reveal = new ChampSelectReveal(riot)
+  }
 
   /** Feed every session create/update here. */
   async update(client: LcuClient, session: LcuChampSelectSession): Promise<void> {
@@ -166,8 +165,8 @@ export class LobbyTracker {
     }
     const startedAt = this.startedAt
     const locked = lockedCells(session)
-    // Real identities for hidden (ranked) teammates, from the champ-select chat room.
-    const reveals = assignReveals(session.myTeam, await this.reveal.resolve(client))
+    // Real identities for hidden (ranked) teammates, from the Riot Client chat roster.
+    const reveals = assignReveals(session.myTeam, await this.reveal.resolve())
 
     const [queueName, players] = await Promise.all([
       this.queueName,
