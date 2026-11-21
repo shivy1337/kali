@@ -1,0 +1,20 @@
+appId: gg.kali.app
+productName: Kali
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**/*
+  - resources/**/*
+  - package.json
+win:
+  target: nsis
+  icon: build/icon.png
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: Kali
+  artifactName: Kali-Setup-${version}.${ext}
+publish:
+  provider: github
