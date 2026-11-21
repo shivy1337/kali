@@ -82,6 +82,9 @@ export class PresenceManager {
   private mapName: string | null = null
   private modeIcon: string | null = null
   private modeIconMapId = 0
+  // Live Client Data reports skinID as 0 even when a skin is equipped, so we remember the skin
+  // the local player picked in champ select and reuse it for the in-game tile.
+  private lastSkin: { championId: number; skinId: number } | null = null
 
   constructor(
     private readonly onStatus: (status: RpcStatus) => void,
@@ -281,9 +284,9 @@ export class PresenceManager {
           party
         })
       case 'Matchmaking':
-        // No "In Queue" text — the elapsed timer already says you're queuing.
         return withButton({
-          details: mapQueue ?? 'In queue',
+          details: mapQueue ?? 'League of Legends',
+          state: 'In queue',
           timestamps: timer,
           assets: lobbyAssets,
           party
@@ -297,6 +300,7 @@ export class PresenceManager {
         })
       case 'ChampSelect': {
         const champ = state.lobby?.players.find((p) => p.isLocalPlayer)?.champion
+        if (champ?.id && champ.skinId) this.lastSkin = { championId: champ.id, skinId: champ.skinId }
         const large = this.largeImage(champ?.id ?? 0, champ?.name ?? '', champ?.skinId ?? 0, '', idleLarge)
         return withButton({
           details: mapQueue ?? state.lobby?.queueName ?? 'Champ select',
@@ -310,10 +314,18 @@ export class PresenceManager {
         const me = state.liveGame?.players.find(
           (p) => p.puuid && p.puuid === profile?.puuid
         )
+        // The live API's skinID is unreliable (often 0); fall back to the champ-select pick.
+        const liveSkin = me?.skinId ?? 0
+        const skinId =
+          liveSkin > 0
+            ? liveSkin
+            : this.lastSkin && this.lastSkin.championId === (me?.championId ?? 0)
+              ? this.lastSkin.skinId
+              : 0
         const large = this.largeImage(
           me?.championId ?? 0,
           me?.championName ?? '',
-          me?.skinId ?? 0,
+          skinId,
           me?.skinName ?? '',
           idleLarge
         )

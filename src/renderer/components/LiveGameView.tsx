@@ -1,11 +1,10 @@
-import { useState } from 'react'
 import type { LiveGame, LivePlayer } from '../../shared/types'
 import { tierName } from '../lib/format'
 import { positionLabel } from '../lib/phase'
+import { usePrefs } from '../lib/prefs'
 import { tierStyle } from '../lib/tiers'
 import { useAsset } from '../lib/useAsset'
 import { ItemRow } from './ItemRow'
-import { LivePlayerModal } from './LivePlayerModal'
 import { Pill } from './ui/Pill'
 import { TierImage } from './ui/RankEmblem'
 
@@ -155,12 +154,15 @@ export function LiveGameView({
   region: string | null
   className?: string
 }) {
-  const [openKey, setOpenKey] = useState<string | null>(null)
+  const prefs = usePrefs()
   const your = byRole(game.players.filter((p) => p.side === 'your'))
   const enemy = byRole(game.players.filter((p) => p.side === 'enemy'))
-  const keyOf = (p: LivePlayer): string => `${p.side}-${p.championId}`
-  // Look the open player up each render so the modal follows live KDA/item updates.
-  const open = game.players.find((p) => keyOf(p) === openKey)
+  // Clicking a player jumps straight to their op.gg (or the chosen lookup provider).
+  const openProfile = (p: LivePlayer): void => {
+    if (!region || !p.gameName) return
+    const riotId = p.tagLine ? `${p.gameName}#${p.tagLine}` : p.gameName
+    window.kali.openPlayerProfile(prefs.lookup, region, riotId)
+  }
 
   return (
     <section
@@ -179,20 +181,16 @@ export function LiveGameView({
           players={your}
           localPuuid={localPuuid}
           tone="text-cyan"
-          onOpen={(p) => setOpenKey(keyOf(p))}
+          onOpen={openProfile}
         />
         <Team
           title="Enemy team"
           players={enemy}
           localPuuid={localPuuid}
           tone="text-red"
-          onOpen={(p) => setOpenKey(keyOf(p))}
+          onOpen={openProfile}
         />
       </div>
-
-      {open && (
-        <LivePlayerModal player={open} region={region} onClose={() => setOpenKey(null)} />
-      )}
     </section>
   )
 }

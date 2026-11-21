@@ -20,19 +20,25 @@ export function LobbyPage({
   recentLobbies: Lobby[]
   liveGame: LiveGame | null
 }) {
-  return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-      <LookupPrefs className="col-span-full" />
-
-      {/* Live game and champ select are the focus when active, so they go first. */}
-      {liveGame && (
+  // During a live game, give the roster the whole window so all ten players fit without maximizing.
+  if (liveGame) {
+    return (
+      <div className="grid grid-cols-1 gap-4">
         <LiveGameView
           game={liveGame}
           localPuuid={profile?.puuid ?? null}
           region={profile?.region ?? null}
           className="col-span-full"
         />
-      )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <LookupPrefs className="col-span-full" />
+
+      {/* Champ select is the focus when active, so it goes first. */}
       {lobby && <ChampSelectPanel lobby={lobby} className="col-span-full" />}
 
       <AccountCard
@@ -42,15 +48,12 @@ export function LobbyPage({
         connection={connection}
       />
 
-      {!lobby && !liveGame && (
+      {!lobby && (
         <Card title="Current lobby">
           <EmptyState icon={<Icon name="swords" size={22} />}>Waiting for champ select…</EmptyState>
         </Card>
       )}
-      <RecentLobbiesCard
-        lobbies={recentLobbies}
-        className={lobby || liveGame ? 'col-span-full' : ''}
-      />
+      <RecentLobbiesCard lobbies={recentLobbies} className={lobby ? 'col-span-full' : ''} />
     </div>
   )
 }
