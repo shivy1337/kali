@@ -76,13 +76,18 @@ export class ChampionData {
     if (!name) return null
     try {
       if (!this.skinsByName) {
-        const data = await client.request<Record<string, { id?: number; name?: string }>>(
-          'GET',
-          '/lol-game-data/assets/v1/skins.json'
-        )
+        const data = await client.request<
+          Record<string, { id?: number; name?: string; chromas?: { name?: string }[] }>
+        >('GET', '/lol-game-data/assets/v1/skins.json')
         const map = new Map<string, number>()
         for (const entry of Object.values(data)) {
-          if (entry?.name && typeof entry.id === 'number') map.set(entry.name.toLowerCase(), entry.id)
+          if (!entry?.name || typeof entry.id !== 'number') continue
+          map.set(entry.name.toLowerCase(), entry.id)
+          // Chromas aren't separate tiles — they share the base skin's tile, so point their
+          // names (e.g. "Withered Rose Zeri (Obsidian)") at the base skin id.
+          for (const chroma of entry.chromas ?? []) {
+            if (chroma?.name) map.set(chroma.name.toLowerCase(), entry.id)
+          }
         }
         this.skinsByName = map
       }
