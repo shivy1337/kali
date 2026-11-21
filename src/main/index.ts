@@ -5,6 +5,7 @@ import { INITIAL_QUEUE_STATUS, type QueueStatus } from '../shared/automation'
 import { DISCORD_INVITE, INITIAL_RPC_STATUS, type RpcStatus } from '../shared/rpc'
 import { INITIAL_UPDATE_STATUS, type UpdateStatus } from '../shared/update'
 import { IPC, type AssetKind, type KaliSnapshot } from '../shared/types'
+import { ensureLogDir } from './log'
 import { Updater } from './updater'
 import { AppSettingsStore } from './appSettings'
 import { AutomationStore } from './automation/settings'
@@ -270,7 +271,7 @@ function registerIpc(): void {
   ipcMain.on(IPC.openLink, (_event, target: unknown) => {
     if (target === 'discord') void shell.openExternal(DISCORD_INVITE)
     else if (target === 'website') void shell.openExternal('https://github.com/shivy1337/kali')
-    else if (target === 'logs') void shell.openPath(app.getPath('userData'))
+    else if (target === 'logs') void ensureLogDir().then((dir) => shell.openPath(dir))
   })
   ipcMain.on(IPC.windowMinimize, (event) => BrowserWindow.fromWebContents(event.sender)?.minimize())
   ipcMain.on(IPC.windowToggleMaximize, (event) => {
