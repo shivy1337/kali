@@ -16,5 +16,4 @@ nsis:
   allowToChangeInstallationDirectory: true
   shortcutName: Kali
   artifactName: Kali-Setup-${version}.${ext}
-publish:
-  provider: github
+# Publishing target is inferred from the git remote in CI (electron-builder --publish always).
