@@ -39,10 +39,9 @@ function normalizeRole(position: string | undefined): Role | null {
 export class ChampSelectAutomation {
   private poll: NodeJS.Timeout | null = null
   private running = false
-  private readonly acted = new Set<number>()
-  private readonly hovered = new Map<number, number>()
   private readonly inFlight = new Set<number>()
   private readonly loggedActions = new Set<number>()
+  private readonly loggedCommit = new Set<number>()
   private readonly sessionBans = new Set<number>()
   private validCache = new Map<'ban' | 'pick', { ids: Set<number>; at: number }>()
 
@@ -69,10 +68,9 @@ export class ChampSelectAutomation {
     this.running = false
     if (this.poll) clearInterval(this.poll)
     this.poll = null
-    this.acted.clear()
-    this.hovered.clear()
     this.inFlight.clear()
     this.loggedActions.clear()
+    this.loggedCommit.clear()
     this.sessionBans.clear()
     this.validCache.clear()
   }
@@ -155,34 +153,37 @@ export class ChampSelectAutomation {
 
     this.inFlight.add(id)
     try {
-      const champ = hoverId > 0 ? hoverId : await this.firstAvailable(client, kind, role)
-      if (!champ) {
+      // `hoverId` is the action's CURRENT champion from the live session (0 if nothing hovered).
+      // Your own hover always wins; otherwise take the first available from your list.
+      const target = hoverId > 0 ? hoverId : await this.firstAvailable(client, kind, role)
+      if (!target) {
         log(`[auto] ${kind}: no champion to ${kind} (hover=${hoverId}, role=${role ?? 'none'})`)
         return
       }
 
-      // Show the pick as a hover first (so "last" timing is visibly pending and overridable).
-      if (this.hovered.get(id) !== champ) {
+      // Step 1: make sure the champion is actually hovered on the action. If it isn't yet, set it
+      // and wait for the next poll — completing in the same instant locks an empty ban/pick.
+      if (hoverId !== target) {
         await client.request('PATCH', `/lol-champ-select/v1/session/actions/${id}`, {
-          championId: champ,
+          championId: target,
           completed: false
         })
-        this.hovered.set(id, champ)
+        log(`[auto] ${kind} hovering ${target} (action ${id})`)
+        return
       }
 
+      // Step 2: the champion is registered on the action (hoverId === target). Complete it when it's
+      // time. We don't latch this: if it doesn't take, the action stays in progress and we retry
+      // next poll until the session reports it done.
       const timing: ActTiming = kind === 'ban' ? this.cs.autoBan.timing : this.cs.autoLock.timing
       if (timing === 'instant' || timeLeft <= LAST_THRESHOLD_MS) {
-        this.acted.add(id)
-        // Commit atomically: set the champion AND complete in one PATCH. Doing a separate POST
-        // /complete can fire before the hovered champion registers, locking an empty ban.
-        await client.request('PATCH', `/lol-champ-select/v1/session/actions/${id}`, {
-          championId: champ,
-          completed: true
-        })
-        log(`[auto] ${kind === 'ban' ? 'BANNED' : 'LOCKED'} champion ${champ} (action ${id})`)
+        await client.request('POST', `/lol-champ-select/v1/session/actions/${id}/complete`)
+        if (!this.loggedCommit.has(id)) {
+          this.loggedCommit.add(id)
+          log(`[auto] ${kind === 'ban' ? 'BANNED' : 'LOCKED'} champion ${target} (action ${id})`)
+        }
       }
     } catch (error) {
-      this.acted.delete(id) // let a later tick retry
       log(`[auto] champ select ${kind} FAILED: ${(error as Error).message}`)
     } finally {
       this.inFlight.delete(id)
