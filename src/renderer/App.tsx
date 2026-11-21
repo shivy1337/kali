@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AutoLookup } from './components/AutoLookup'
+import { UpdateBanner } from './components/UpdateBanner'
 import { Sidebar } from './components/layout/Sidebar'
 import { TitleBar } from './components/layout/TitleBar'
 import { phaseLabel } from './lib/phase'
@@ -23,35 +24,38 @@ export function App() {
   const section = page.id === 'lobby' ? phaseLabel(connection, phase) : page.section
 
   return (
-    <div className="flex h-full bg-base">
+    <div className="flex h-full flex-col bg-base">
       <AutoLookup lobby={lobby} />
-      <Sidebar page={pageId} onNavigate={setPageId} version={version} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <TitleBar
-          section={section}
-          title={page.label}
-          connection={connection}
-          maximized={maximized}
-        />
-        <main className="flex-1 overflow-y-auto p-5">
-          {page.id === 'lobby' ? (
-            <LobbyPage
-              connection={connection}
-              profile={profile}
-              lobby={lobby}
-              recentLobbies={recentLobbies}
-              liveGame={liveGame}
-            />
-          ) : page.id === 'history' ? (
-            <HistoryPage lobbies={recentLobbies} />
-          ) : page.id === 'settings' ? (
-            <SettingsPage />
-          ) : page.id === 'rpc' ? (
-            <RpcPage />
-          ) : (
-            <ComingSoon label={page.label} icon={page.icon} />
-          )}
-        </main>
+      <UpdateBanner />
+      <div className="flex min-h-0 flex-1">
+        <Sidebar page={pageId} onNavigate={setPageId} version={version} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TitleBar
+            section={section}
+            title={page.label}
+            connection={connection}
+            maximized={maximized}
+          />
+          <main className="flex-1 overflow-y-auto p-5">
+            {page.id === 'lobby' ? (
+              <LobbyPage
+                connection={connection}
+                profile={profile}
+                lobby={lobby}
+                recentLobbies={recentLobbies}
+                liveGame={liveGame}
+              />
+            ) : page.id === 'history' ? (
+              <HistoryPage lobbies={recentLobbies} />
+            ) : page.id === 'settings' ? (
+              <SettingsPage />
+            ) : page.id === 'rpc' ? (
+              <RpcPage />
+            ) : (
+              <ComingSoon label={page.label} icon={page.icon} />
+            )}
+          </main>
+        </div>
       </div>
     </div>
   )

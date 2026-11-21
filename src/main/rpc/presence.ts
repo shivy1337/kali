@@ -1,16 +1,17 @@
 import {
   DEFAULT_RPC_SETTINGS,
+  DISCORD_INVITE,
   effectiveAppId,
   INITIAL_RPC_STATUS,
   type RpcSettings,
   type RpcStatus
 } from '../../shared/rpc'
 import type { GamePhase, LiveGame, Lobby, Profile, RankedQueue } from '../../shared/types'
+import type { LcuClient } from '../lcu/client'
 import { DiscordClient, type DiscordActivity } from './discordClient'
 
 /** Everything the presence is built from — fed from Kali's existing LCU state. */
 export interface PresenceState {
-  /** Is League (the LCU) connected? When false we clear presence. */
   connected: boolean
   phase: GamePhase
   profile: Profile | null
@@ -25,23 +26,19 @@ const profileIcon = (id: number): string =>
   `${CDN}/rcp-be-lol-game-data/global/default/v1/profile-icons/${id}.jpg`
 const rankEmblem = (tier: string): string =>
   `${CDN}/rcp-fe-lol-shared-components/global/default/${tier.toLowerCase()}.png`
-
-function capitalize(value: string): string {
-  return value.charAt(0) + value.slice(1).toLowerCase()
+const splashArt = (championId: number, skinId: number): string => {
+  const num = skinId >= 1000 ? skinId % 1000 : skinId // champ select gives full ids, live gives the number
+  return `https://cdn.communitydragon.org/latest/champion/${championId}/splash-art/skin/${num}`
 }
 
-function rankText(rank: RankedQueue): string {
-  if (!rank.tier) return 'Unranked'
-  const name = rank.division ? `${capitalize(rank.tier)} ${rank.division}` : capitalize(rank.tier)
-  return `${name} · ${rank.leaguePoints} LP`
-}
+const capitalize = (value: string): string => value.charAt(0) + value.slice(1).toLowerCase()
 
-/** Idle, lobby, queue, champ select and in-game phases map to active presence; the rest clear it. */
-const ACTIVE = new Set(['None', 'Lobby', 'Matchmaking', 'ReadyCheck', 'ChampSelect', 'InProgress'])
+const PARTY_PHASES = new Set(['Lobby', 'Matchmaking', 'ReadyCheck', 'ChampSelect'])
+const PARTY_TTL_MS = 4000
 
 /**
  * Turns Kali's LCU state into a Discord Rich Presence and keeps it in sync, reconnecting to Discord
- * on its own. Images are plain Community Dragon URLs (no asset uploads / tokens needed).
+ * on its own. Images are Community Dragon URLs (no asset uploads / tokens needed).
  */
 export class PresenceManager {
   private readonly client: DiscordClient
@@ -51,8 +48,12 @@ export class PresenceManager {
   private lastPhase = ''
   private lastActivityJson = ''
   private status: RpcStatus = INITIAL_RPC_STATUS
+  private party = { size: 0, max: 0, at: 0 }
 
-  constructor(private readonly onStatus: (status: RpcStatus) => void) {
+  constructor(
+    private readonly onStatus: (status: RpcStatus) => void,
+    private readonly getClient: () => LcuClient | null
+  ) {
     this.client = new DiscordClient((connected) => this.onDiscord(connected))
   }
 
@@ -68,6 +69,7 @@ export class PresenceManager {
       this.lastPhase = state.phase
     }
     this.state = state
+    void this.refreshParty(state)
     this.rebuild()
   }
 
@@ -75,7 +77,6 @@ export class PresenceManager {
     this.client.stop()
   }
 
-  /** Start / stop the Discord connection based on the settings. */
   private reconcile(): void {
     const appId = effectiveAppId(this.settings)
     if (this.settings.enabled && appId) {
@@ -98,6 +99,34 @@ export class PresenceManager {
     }
   }
 
+  private async refreshParty(state: PresenceState): Promise<void> {
+    if (!this.settings.enabled || !this.settings.showParty || !PARTY_PHASES.has(state.phase)) {
+      if (this.party.size !== 0) {
+        this.party = { size: 0, max: 0, at: 0 }
+        this.rebuild()
+      }
+      return
+    }
+    if (Date.now() - this.party.at < PARTY_TTL_MS) return
+    this.party.at = Date.now()
+    const client = this.getClient()
+    if (!client) return
+    try {
+      const lobby = await client.request<{
+        members?: unknown[]
+        gameConfig?: { maxLobbySize?: number }
+      }>('GET', '/lol-lobby/v2/lobby')
+      const size = lobby?.members?.length ?? 0
+      const max = lobby?.gameConfig?.maxLobbySize ?? size
+      if (size !== this.party.size || max !== this.party.max) {
+        this.party = { size, max, at: Date.now() }
+        this.rebuild()
+      }
+    } catch {
+      // Not in a lobby (solo queue dodge etc.): leave party as-is.
+    }
+  }
+
   private rebuild(): void {
     if (!this.settings.enabled || !effectiveAppId(this.settings) || !this.client.connected) return
     const activity = this.build()
@@ -105,65 +134,123 @@ export class PresenceManager {
     if (json === this.lastActivityJson) return
     this.lastActivityJson = json
     this.client.setActivity(activity)
-    this.setStatus('connected', activity ? `${activity.details ?? ''} ${activity.state ?? ''}`.trim() : 'Idle')
+    this.setStatus(
+      'connected',
+      activity ? `${activity.details ?? ''} ${activity.state ?? ''}`.trim() : 'Idle'
+    )
+  }
+
+  // --- building -----------------------------------------------------------------------------
+
+  private rankAssets(profile: Profile | null): Partial<DiscordActivity['assets']> {
+    if (!this.settings.showRank || !profile?.ranked) return {}
+    const queue = this.settings.rankQueue === 'flex' ? profile.ranked.flex : profile.ranked.solo
+    if (!queue.tier) return {}
+    return { small_image: rankEmblem(queue.tier), small_text: this.rankText(queue) }
+  }
+
+  private rankText(queue: RankedQueue): string {
+    const name = queue.division
+      ? `${capitalize(queue.tier!)} ${queue.division}`
+      : capitalize(queue.tier!)
+    const label = this.settings.rankQueue === 'flex' ? ' (Flex)' : ''
+    let text = `${name}${label} · ${queue.leaguePoints} LP`
+    if (this.settings.showWinLoss && queue.wins + queue.losses > 0) {
+      text += ` · ${queue.wins}W ${queue.losses}L`
+    }
+    return text
+  }
+
+  private largeImage(
+    championId: number,
+    championName: string,
+    skinId: number,
+    skinName: string,
+    idleLarge?: string
+  ): Pick<NonNullable<DiscordActivity['assets']>, 'large_image' | 'large_text'> {
+    if (this.settings.useSkinSplash && championId > 0) {
+      return { large_image: splashArt(championId, skinId), large_text: skinName || championName }
+    }
+    if (this.settings.showChampion && championId > 0) {
+      return { large_image: championIcon(championId), large_text: championName }
+    }
+    return { large_image: idleLarge, large_text: 'League of Legends' }
   }
 
   private build(): DiscordActivity | null {
     const state = this.state
-    if (!state || !state.connected) return null // League closed: no presence
+    if (!state || !state.connected) return null
     const cfg = this.settings
-    const solo = cfg.showRank ? (state.profile?.ranked?.solo ?? null) : null
-    const small =
-      solo && solo.tier
-        ? { small_image: rankEmblem(solo.tier), small_text: rankText(solo) }
-        : {}
+    const profile = state.profile
+    const rank = this.rankAssets(profile)
     const timer = cfg.showTimer ? { start: this.phaseSince } : undefined
-    const idleLarge = state.profile ? profileIcon(state.profile.profileIconId) : undefined
+    const idleLarge = profile ? profileIcon(profile.profileIconId) : undefined
+    const idleAssets = { large_image: idleLarge, large_text: 'League of Legends', ...rank }
+    const party =
+      cfg.showParty && this.party.size > 1
+        ? { size: [this.party.size, Math.max(this.party.max, this.party.size)] as [number, number] }
+        : undefined
 
-    const base = (details: string, extra?: Partial<DiscordActivity>): DiscordActivity => ({
-      details,
-      timestamps: timer,
-      assets: { large_image: idleLarge, large_text: 'League of Legends', ...small },
-      ...extra
-    })
+    const withButton = (activity: DiscordActivity | null): DiscordActivity | null => {
+      if (activity && cfg.showJoinButton) {
+        activity.buttons = [{ label: 'Join the Discord', url: DISCORD_INVITE }]
+      }
+      return activity
+    }
 
     switch (state.phase) {
       case 'Lobby':
-        return base('In the lobby')
+        return withButton({ details: 'In the lobby', timestamps: timer, assets: idleAssets, party })
       case 'Matchmaking':
-        return base('In queue')
+        return withButton({ details: 'In queue', timestamps: timer, assets: idleAssets, party })
       case 'ReadyCheck':
-        return base('Match found')
+        return withButton({ details: 'Match found', timestamps: timer, assets: idleAssets })
       case 'ChampSelect': {
         const champ = state.lobby?.players.find((p) => p.isLocalPlayer)?.champion
-        const assets =
-          cfg.showChampion && champ
-            ? { large_image: championIcon(champ.id), large_text: champ.name, ...small }
-            : { large_image: idleLarge, large_text: 'League of Legends', ...small }
-        return { details: 'In champ select', state: champ?.name, timestamps: timer, assets }
+        const large = this.largeImage(champ?.id ?? 0, champ?.name ?? '', champ?.skinId ?? 0, '', idleLarge)
+        return withButton({
+          details: 'In champ select',
+          state: champ?.name,
+          timestamps: timer,
+          assets: { ...large, ...rank },
+          party
+        })
       }
       case 'InProgress': {
         const me = state.liveGame?.players.find(
-          (p) => p.puuid && p.puuid === state.profile?.puuid
+          (p) => p.puuid && p.puuid === profile?.puuid
         )
-        const start = state.liveGame
-          ? Date.now() - state.liveGame.gameTime * 1000
-          : this.phaseSince
-        const assets =
-          cfg.showChampion && me
-            ? { large_image: championIcon(me.championId), large_text: me.championName, ...small }
-            : { large_image: idleLarge, large_text: 'League of Legends', ...small }
-        return {
+        const large = this.largeImage(
+          me?.championId ?? 0,
+          me?.championName ?? '',
+          me?.skinId ?? 0,
+          me?.skinName ?? '',
+          idleLarge
+        )
+        const stats =
+          cfg.showStats && me
+            ? `${me.kills}/${me.deaths}/${me.assists} · ${me.creepScore} CS · Lvl ${me.level}`
+            : (state.liveGame?.queueName ?? undefined)
+        const start = state.liveGame ? Date.now() - state.liveGame.gameTime * 1000 : this.phaseSince
+        return withButton({
           details: me ? `Playing ${me.championName}` : 'In game',
-          state: state.liveGame?.queueName ?? undefined,
+          state: stats,
           timestamps: cfg.showTimer ? { start } : undefined,
-          assets
-        }
+          assets: { ...large, ...rank }
+        })
       }
       case 'None':
       default:
-        if (!ACTIVE.has(state.phase) || !cfg.idleEnabled) return null
-        return base(cfg.idleText)
+        if (state.phase !== 'None' || !cfg.idleEnabled) return null
+        if (cfg.idleMode === 'profile' && profile) {
+          return withButton({
+            details: `${profile.gameName}#${profile.tagLine}`,
+            state: `Level ${profile.summonerLevel}`,
+            timestamps: timer,
+            assets: idleAssets
+          })
+        }
+        return withButton({ details: cfg.idleText, timestamps: timer, assets: idleAssets })
     }
   }
 

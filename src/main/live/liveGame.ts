@@ -113,6 +113,8 @@ export class LiveGameTracker {
           tagLine,
           championId,
           championName: lp?.championName ?? (await this.champions.name(client, championId)),
+          skinId: lp?.skinID ?? 0,
+          skinName: lp?.skinName ?? '',
           side,
           position: gf.selectedPosition ? gf.selectedPosition.toUpperCase() : null,
           level: lp?.level ?? 0,

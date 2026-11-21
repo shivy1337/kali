@@ -3,6 +3,7 @@
 import type { AppSettings } from './app'
 import type { AutomationSettings, QueueStatus } from './automation'
 import type { RpcSettings, RpcStatus } from './rpc'
+import type { UpdateStatus } from './update'
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected'
 
@@ -82,6 +83,8 @@ export interface LobbyChampion {
   name: string
   /** True once the pick is locked in; false while only hovered / selected. */
   locked: boolean
+  /** Selected skin id (full id, e.g. 429003), or 0/undefined for the base skin / none. */
+  skinId?: number
 }
 
 /** One teammate slot in champ select. */
@@ -124,6 +127,9 @@ export interface LivePlayer {
   tagLine: string
   championId: number
   championName: string
+  /** Selected skin id and name, from the live game. */
+  skinId: number
+  skinName: string
   /** Relative to the local player. */
   side: 'your' | 'enemy'
   position: string | null
@@ -208,6 +214,11 @@ export interface KaliApi {
   onRpcStatus(listener: (status: RpcStatus) => void): () => void
   /** Fired when champ select starts and "show on champ select" is on (navigate to Lobby). */
   onShowChampSelect(listener: () => void): () => void
+  /** Auto-update status + controls. */
+  getUpdateStatus(): Promise<UpdateStatus>
+  onUpdateStatus(listener: (status: UpdateStatus) => void): () => void
+  downloadUpdate(): void
+  installUpdate(): void
   /** Subscribe to the window being maximized / restored. Returns an unsubscribe function. */
   onMaximized(listener: (maximized: boolean) => void): () => void
   window: {
@@ -239,6 +250,10 @@ export const IPC = {
   rpcGet: 'kali:rpc-get',
   rpcSet: 'kali:rpc-set',
   rpcStatus: 'kali:rpc-status',
+  updateGet: 'kali:update-get',
+  updateStatus: 'kali:update-status',
+  updateDownload: 'kali:update-download',
+  updateInstall: 'kali:update-install',
   showChampSelect: 'kali:show-champ-select',
   maximized: 'kali:maximized',
   windowMinimize: 'kali:window-minimize',

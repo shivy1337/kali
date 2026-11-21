@@ -6,6 +6,8 @@ export interface LiveClientPlayer {
   riotIdTagLine?: string
   summonerName?: string
   championName?: string
+  skinID?: number
+  skinName?: string
   team?: string
   level?: number
   isBot?: boolean

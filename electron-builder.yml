@@ -20,4 +20,7 @@ nsis:
   createDesktopShortcut: true
   shortcutName: Kali
   artifactName: Kali-Setup-${version}.${ext}
-# Publishing target is inferred from the git remote in CI (electron-builder --publish always).
+publish:
+  provider: github
+  owner: shivy1337
+  repo: kali

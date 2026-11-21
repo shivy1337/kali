@@ -8,6 +8,7 @@ export interface DiscordActivity {
   timestamps?: { start?: number }
   assets?: { large_image?: string; large_text?: string; small_image?: string; small_text?: string }
   party?: { size?: [number, number] }
+  buttons?: { label: string; url: string }[]
 }
 
 const OP_HANDSHAKE = 0

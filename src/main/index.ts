@@ -3,7 +3,9 @@ import { join } from 'node:path'
 import iconPath from '../../resources/icon.png?asset'
 import { INITIAL_QUEUE_STATUS, type QueueStatus } from '../shared/automation'
 import { INITIAL_RPC_STATUS, type RpcStatus } from '../shared/rpc'
+import { INITIAL_UPDATE_STATUS, type UpdateStatus } from '../shared/update'
 import { IPC, type AssetKind, type KaliSnapshot } from '../shared/types'
+import { Updater } from './updater'
 import { AppSettingsStore } from './appSettings'
 import { AutomationStore } from './automation/settings'
 import { LcuConnection } from './lcu/connection'
@@ -29,11 +31,20 @@ const appSettings = new AppSettingsStore(join(app.getPath('userData'), 'app-sett
 const rpcSettings = new RpcSettingsStore(join(app.getPath('userData'), 'rpc-settings.json'))
 let queueStatus: QueueStatus = INITIAL_QUEUE_STATUS
 let rpcStatus: RpcStatus = INITIAL_RPC_STATUS
+let updateStatus: UpdateStatus = INITIAL_UPDATE_STATUS
 
-const presence = new PresenceManager((status) => {
-  rpcStatus = status
-  send(IPC.rpcStatus, status)
+const updater = new Updater((status) => {
+  updateStatus = status
+  send(IPC.updateStatus, status)
 })
+
+const presence = new PresenceManager(
+  (status) => {
+    rpcStatus = status
+    send(IPC.rpcStatus, status)
+  },
+  () => lcu.currentClient
+)
 
 function presenceState(): PresenceState {
   return {
@@ -199,6 +210,9 @@ function registerIpc(): void {
     return lcu.getAsset(kind satisfies AssetKind, key)
   })
   ipcMain.handle(IPC.getChampions, () => lcu.getChampions())
+  ipcMain.handle(IPC.updateGet, () => updateStatus)
+  ipcMain.on(IPC.updateDownload, () => updater.download())
+  ipcMain.on(IPC.updateInstall, () => updater.install())
   ipcMain.handle(IPC.rpcGet, () => ({ settings: rpcSettings.settings, status: rpcStatus }))
   ipcMain.handle(IPC.rpcSet, async (_event, value: unknown) => {
     const settings = await rpcSettings.save(value)
@@ -249,6 +263,8 @@ if (!app.requestSingleInstanceLock()) {
     createTray()
     createWindow()
     lcu.start()
+    // Check for updates shortly after launch (and only in the packaged app).
+    setTimeout(() => updater.check(), 4000)
   })
 
   app.on('window-all-closed', () => {

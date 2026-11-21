@@ -27,6 +27,7 @@ interface LcuChampSelectPlayer {
   puuid?: string
   gameName?: string
   tagLine?: string
+  selectedSkinId?: number
   /** 1 = blue (ORDER), 2 = red (CHAOS). */
   team?: number
   /** Stable per-cell id present even under ranked anonymity; maps to the chat room's real identity. */
@@ -191,7 +192,12 @@ export class LobbyTracker {
             position: player.assignedPosition ? player.assignedPosition.toUpperCase() : null,
             champion:
               championId > 0 && championName
-                ? { id: championId, name: championName, locked: picked > 0 && locked.has(cellId) }
+                ? {
+                    id: championId,
+                    name: championName,
+                    locked: picked > 0 && locked.has(cellId),
+                    skinId: player.selectedSkinId ?? 0
+                  }
                 : null,
             profile,
             insights: lookup.insights

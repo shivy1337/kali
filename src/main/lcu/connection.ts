@@ -122,6 +122,11 @@ export class LcuConnection {
     return this.liveGameTracker.current
   }
 
+  /** The active LCU client (for on-demand reads like party size); `null` while disconnected. */
+  get currentClient(): LcuClient | null {
+    return this.client
+  }
+
   get lobby(): Lobby | null {
     return this.lobbyTracker.current
   }
