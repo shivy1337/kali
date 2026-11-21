@@ -173,7 +173,12 @@ export class ChampSelectAutomation {
       const timing: ActTiming = kind === 'ban' ? this.cs.autoBan.timing : this.cs.autoLock.timing
       if (timing === 'instant' || timeLeft <= LAST_THRESHOLD_MS) {
         this.acted.add(id)
-        await client.request('POST', `/lol-champ-select/v1/session/actions/${id}/complete`)
+        // Commit atomically: set the champion AND complete in one PATCH. Doing a separate POST
+        // /complete can fire before the hovered champion registers, locking an empty ban.
+        await client.request('PATCH', `/lol-champ-select/v1/session/actions/${id}`, {
+          championId: champ,
+          completed: true
+        })
         log(`[auto] ${kind === 'ban' ? 'BANNED' : 'LOCKED'} champion ${champ} (action ${id})`)
       }
     } catch (error) {
