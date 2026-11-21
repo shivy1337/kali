@@ -33,6 +33,10 @@ const splashArt = (championId: number, skinId: number): string => {
 
 const capitalize = (value: string): string => value.charAt(0) + value.slice(1).toLowerCase()
 
+// Shown when hovering the large image (the app/brand); the bold line above it is the Discord
+// application's name, which the user sets on the dev portal (e.g. "League of Legends").
+const HOVER_TEXT = 'discord.gg/kaliapp'
+
 const PARTY_PHASES = new Set(['Lobby', 'Matchmaking', 'ReadyCheck', 'ChampSelect'])
 const PARTY_TTL_MS = 4000
 
@@ -168,13 +172,14 @@ export class PresenceManager {
     skinName: string,
     idleLarge?: string
   ): Pick<NonNullable<DiscordActivity['assets']>, 'large_image' | 'large_text'> {
+    // The skin/champion name goes in the hover tooltip when known, otherwise the brand.
     if (this.settings.useSkinSplash && championId > 0) {
       return { large_image: splashArt(championId, skinId), large_text: skinName || championName }
     }
     if (this.settings.showChampion && championId > 0) {
       return { large_image: championIcon(championId), large_text: championName }
     }
-    return { large_image: idleLarge, large_text: 'League of Legends' }
+    return { large_image: idleLarge, large_text: HOVER_TEXT }
   }
 
   private build(): DiscordActivity | null {
@@ -185,7 +190,7 @@ export class PresenceManager {
     const rank = this.rankAssets(profile)
     const timer = cfg.showTimer ? { start: this.phaseSince } : undefined
     const idleLarge = profile ? profileIcon(profile.profileIconId) : undefined
-    const idleAssets = { large_image: idleLarge, large_text: 'League of Legends', ...rank }
+    const idleAssets = { large_image: idleLarge, large_text: HOVER_TEXT, ...rank }
     const party =
       cfg.showParty && this.party.size > 1
         ? { size: [this.party.size, Math.max(this.party.max, this.party.size)] as [number, number] }
@@ -209,8 +214,8 @@ export class PresenceManager {
         const champ = state.lobby?.players.find((p) => p.isLocalPlayer)?.champion
         const large = this.largeImage(champ?.id ?? 0, champ?.name ?? '', champ?.skinId ?? 0, '', idleLarge)
         return withButton({
-          details: 'In champ select',
-          state: champ?.name,
+          details: state.lobby?.queueName ?? 'Champ select',
+          state: champ?.name ? `Champ select · ${champ.name}` : 'In champ select',
           timestamps: timer,
           assets: { ...large, ...rank },
           party
@@ -227,13 +232,14 @@ export class PresenceManager {
           me?.skinName ?? '',
           idleLarge
         )
-        const stats =
+        const kda =
           cfg.showStats && me
-            ? `${me.kills}/${me.deaths}/${me.assists} · ${me.creepScore} CS · Lvl ${me.level}`
-            : (state.liveGame?.queueName ?? undefined)
+            ? ` · ${me.kills}/${me.deaths}/${me.assists} · ${me.creepScore} CS`
+            : ''
+        const stats = me ? `${me.championName}${kda}` : undefined
         const start = state.liveGame ? Date.now() - state.liveGame.gameTime * 1000 : this.phaseSince
         return withButton({
-          details: me ? `Playing ${me.championName}` : 'In game',
+          details: state.liveGame?.queueName ?? 'In game',
           state: stats,
           timestamps: cfg.showTimer ? { start } : undefined,
           assets: { ...large, ...rank }
