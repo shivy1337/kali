@@ -106,6 +106,9 @@ export class LiveGameTracker {
         const championId = gf.championId ?? 0
         const lp = liveByChamp.get(championId)
         const { gameName, tagLine } = splitRiotId(lp)
+        // Prefer resolving the skin from its name (correct even when skinID is 0, e.g. skin changers).
+        const skinName = lp?.skinName ?? ''
+        const skinByName = skinName ? await this.champions.skinIdByName(client, skinName) : null
         return {
           puuid: gf.puuid ?? null,
           riotId: lp?.riotId ?? (gameName ? `${gameName}#${tagLine}` : ''),
@@ -113,8 +116,8 @@ export class LiveGameTracker {
           tagLine,
           championId,
           championName: lp?.championName ?? (await this.champions.name(client, championId)),
-          skinId: lp?.skinID ?? 0,
-          skinName: lp?.skinName ?? '',
+          skinId: skinByName ?? lp?.skinID ?? 0,
+          skinName,
           side,
           position: gf.selectedPosition ? gf.selectedPosition.toUpperCase() : null,
           level: lp?.level ?? 0,

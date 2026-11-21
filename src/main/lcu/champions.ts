@@ -13,6 +13,7 @@ export class ChampionData {
   private names: Map<number, string> | null = null
   private byName: Map<string, number> | null = null
   private summary: ChampionSummary[] | null = null
+  private skinsByName: Map<string, number> | null = null
   private readonly icons = new Map<number, string>()
 
   private async ensure(client: LcuClient): Promise<void> {
@@ -64,6 +65,31 @@ export class ChampionData {
       return []
     }
     return this.summary ?? []
+  }
+
+  /**
+   * Full skin id for a skin's display name (e.g. "Pentakill Olaf" -> 2004). Resolves the in-game
+   * tile from the name the client reports, which stays correct even when the numeric skin id is
+   * 0 — including skins applied by a skin changer that the account doesn't own. `null` if unknown.
+   */
+  async skinIdByName(client: LcuClient, name: string): Promise<number | null> {
+    if (!name) return null
+    try {
+      if (!this.skinsByName) {
+        const data = await client.request<Record<string, { id?: number; name?: string }>>(
+          'GET',
+          '/lol-game-data/assets/v1/skins.json'
+        )
+        const map = new Map<string, number>()
+        for (const entry of Object.values(data)) {
+          if (entry?.name && typeof entry.id === 'number') map.set(entry.name.toLowerCase(), entry.id)
+        }
+        this.skinsByName = map
+      }
+    } catch {
+      return null // not cached: retried on the next call
+    }
+    return this.skinsByName.get(name.toLowerCase()) ?? null
   }
 
   async icon(client: LcuClient | null, id: number): Promise<string | null> {
