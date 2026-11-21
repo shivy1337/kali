@@ -170,6 +170,7 @@ export class PresenceManager {
   private setStatus(state: RpcStatus['state'], detail = ''): void {
     if (this.status.state === state && this.status.detail === detail) return
     this.status = { state, detail }
+    console.log(`[rpc] ${state}${detail ? ` — ${detail}` : ''}`)
     this.onStatus(this.status)
   }
 }

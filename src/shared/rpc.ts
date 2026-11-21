@@ -5,7 +5,7 @@
  * with no setup — just the Enable toggle. Empty until the one Kali Discord app is created; set it
  * here and all users pick it up. A user can still override it with their own id in settings.
  */
-export const BUNDLED_APP_ID = ''
+export const BUNDLED_APP_ID = '1573611902083539097'
 
 /** The id actually used: the user's override if set, otherwise the bundled Kali app. */
 export function effectiveAppId(settings: Pick<RpcSettings, 'appId'>): string {
