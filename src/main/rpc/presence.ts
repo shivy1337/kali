@@ -336,7 +336,11 @@ export class PresenceManager {
       case 'ChampSelect': {
         const champ = state.lobby?.players.find((p) => p.isLocalPlayer)?.champion
         if (champ?.id && champ.skinId) this.lastSkin = { championId: champ.id, skinId: champ.skinId }
-        const large = this.largeImage(champ?.id ?? 0, champ?.name ?? '', champ?.skinId ?? 0, '', idleLarge)
+        // Before a champion is hovered/picked, show the mode icon (like the lobby) rather than the
+        // profile icon; switch to the champion/skin tile once there's one.
+        const large = champ?.id
+          ? this.largeImage(champ.id, champ.name ?? '', champ.skinId ?? 0, '', idleLarge)
+          : { large_image: lobbyAssets.large_image, large_text: lobbyAssets.large_text }
         return withButton({
           details: mapQueue ?? state.lobby?.queueName ?? 'Champ select',
           state: champ?.name ? `Champ select · ${champ.name}` : 'In champ select',

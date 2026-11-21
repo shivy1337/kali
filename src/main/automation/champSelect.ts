@@ -43,6 +43,7 @@ export class ChampSelectAutomation {
   private readonly hovered = new Map<number, number>()
   private readonly inFlight = new Set<number>()
   private readonly loggedActions = new Set<number>()
+  private readonly sessionBans = new Set<number>()
   private validCache = new Map<'ban' | 'pick', { ids: Set<number>; at: number }>()
 
   constructor(
@@ -72,6 +73,7 @@ export class ChampSelectAutomation {
     this.hovered.clear()
     this.inFlight.clear()
     this.loggedActions.clear()
+    this.sessionBans.clear()
     this.validCache.clear()
   }
 
@@ -102,6 +104,17 @@ export class ChampSelectAutomation {
     const me = session.myTeam?.find((cell) => cell.cellId === local)
     const role = normalizeRole(me?.assignedPosition)
     const timeLeft = session.timer?.adjustedTimeLeftInPhase ?? 0
+
+    // Track champions already banned this game so we skip them (but still ban ones a teammate is
+    // only *hovering* — those are excluded by bannable-champion-ids, which made bans miss before).
+    this.sessionBans.clear()
+    for (const group of session.actions ?? []) {
+      for (const a of group ?? []) {
+        if (a.type === 'ban' && a.completed && typeof a.championId === 'number' && a.championId > 0) {
+          this.sessionBans.add(a.championId)
+        }
+      }
+    }
 
     for (const group of session.actions ?? []) {
       for (const action of group ?? []) {
@@ -179,7 +192,11 @@ export class ChampSelectAutomation {
     const list =
       kind === 'ban' ? this.cs.autoBan.championIds : role ? this.cs.autoLock.picks[role] : []
     if (!list || list.length === 0) return null
-    const valid = await this.validIds(client, kind)
+    // Bans: take the first from your list that isn't already banned. We deliberately don't gate on
+    // bannable-champion-ids — it also hides champions a teammate is hovering, which made the ban
+    // wait instead of firing. Picks: must be genuinely pickable (not taken/banned).
+    if (kind === 'ban') return list.find((id) => !this.sessionBans.has(id)) ?? null
+    const valid = await this.validIds(client, 'pick')
     if (!valid) return list[0]
     return list.find((id) => valid.has(id)) ?? null
   }
