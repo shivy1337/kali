@@ -4,6 +4,11 @@
   "version": "0.1.0",
   "description": "Kali — a League of Legends desktop companion",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shivy1337/kali.git"
+  },
+  "author": "shivy1337",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
