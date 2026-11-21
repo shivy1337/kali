@@ -2,6 +2,7 @@ import type { ActTiming, AutomationSettings, Role } from '../../shared/automatio
 import { ROLES } from '../../shared/automation'
 import type { GamePhase } from '../../shared/types'
 import type { LcuClient } from '../lcu/client'
+import { log } from '../log'
 
 interface CsAction {
   id?: number
@@ -41,6 +42,7 @@ export class ChampSelectAutomation {
   private readonly acted = new Set<number>()
   private readonly hovered = new Map<number, number>()
   private readonly inFlight = new Set<number>()
+  private readonly loggedActions = new Set<number>()
   private validCache = new Map<'ban' | 'pick', { ids: Set<number>; at: number }>()
 
   constructor(
@@ -69,12 +71,16 @@ export class ChampSelectAutomation {
     this.acted.clear()
     this.hovered.clear()
     this.inFlight.clear()
+    this.loggedActions.clear()
     this.validCache.clear()
   }
 
   private startPoll(): void {
     if (this.running) return
     this.running = true
+    log(
+      `[auto] champ select entered — autoBan=${this.cs.autoBan.enabled} (${this.cs.autoBan.timing}, ids=[${this.cs.autoBan.championIds.join(',')}]) autoLock=${this.cs.autoLock.enabled}`
+    )
     this.poll = setInterval(() => void this.tick(), POLL_MS)
   }
 
@@ -107,6 +113,13 @@ export class ChampSelectAutomation {
         ) {
           continue
         }
+        if (!this.loggedActions.has(action.id)) {
+          this.loggedActions.add(action.id)
+          const on = action.type === 'ban' ? this.cs.autoBan.enabled : this.cs.autoLock.enabled
+          log(
+            `[auto] my ${action.type} turn (action ${action.id}, hover=${action.championId ?? 0}, enabled=${on}, timeLeft=${Math.round(timeLeft)}ms)`
+          )
+        }
         if (action.type === 'ban' && this.cs.autoBan.enabled) {
           await this.handle(action.id, action.championId ?? 0, 'ban', role, timeLeft)
         } else if (action.type === 'pick' && this.cs.autoLock.enabled) {
@@ -130,7 +143,10 @@ export class ChampSelectAutomation {
     this.inFlight.add(id)
     try {
       const champ = hoverId > 0 ? hoverId : await this.firstAvailable(client, kind, role)
-      if (!champ) return
+      if (!champ) {
+        log(`[auto] ${kind}: no champion to ${kind} (hover=${hoverId}, role=${role ?? 'none'})`)
+        return
+      }
 
       // Show the pick as a hover first (so "last" timing is visibly pending and overridable).
       if (this.hovered.get(id) !== champ) {
@@ -145,11 +161,11 @@ export class ChampSelectAutomation {
       if (timing === 'instant' || timeLeft <= LAST_THRESHOLD_MS) {
         this.acted.add(id)
         await client.request('POST', `/lol-champ-select/v1/session/actions/${id}/complete`)
-        console.log(`[auto] ${kind === 'ban' ? 'banned' : 'locked'} champion ${champ}`)
+        log(`[auto] ${kind === 'ban' ? 'BANNED' : 'LOCKED'} champion ${champ} (action ${id})`)
       }
     } catch (error) {
       this.acted.delete(id) // let a later tick retry
-      console.error(`[auto] champ select ${kind} failed`, (error as Error).message)
+      log(`[auto] champ select ${kind} FAILED: ${(error as Error).message}`)
     } finally {
       this.inFlight.delete(id)
     }

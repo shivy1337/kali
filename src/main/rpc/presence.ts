@@ -8,6 +8,7 @@ import {
 } from '../../shared/rpc'
 import type { GamePhase, LiveGame, Lobby, Profile, RankedQueue } from '../../shared/types'
 import type { LcuClient } from '../lcu/client'
+import { log } from '../log'
 import { DiscordClient, type DiscordActivity } from './discordClient'
 
 /** Everything the presence is built from — fed from Kali's existing LCU state. */
@@ -173,9 +174,13 @@ export class PresenceManager {
           const asset = map?.assets?.['game-select-icon-default']
           this.modeIcon = asset ? modeIconUrl(asset) : null
           this.mapName = map?.name ?? null
-        } catch {
+          log(
+            `[rpc] map ${mapId} (${this.mapName ?? '?'}) asset=${asset ?? 'MISSING'} keys=[${Object.keys(map?.assets ?? {}).join(',')}]`
+          )
+        } catch (error) {
           this.modeIcon = null
           this.mapName = null
+          log(`[rpc] map ${mapId} fetch FAILED: ${(error as Error).message}`)
         }
       }
 
