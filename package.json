@@ -1,7 +1,7 @@
 {
   "name": "kali",
   "productName": "Kali",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Kali — a League of Legends desktop companion",
   "private": true,
   "repository": {

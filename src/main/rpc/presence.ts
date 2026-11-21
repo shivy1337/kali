@@ -83,6 +83,8 @@ export class PresenceManager {
   private mapName: string | null = null
   private modeIcon: string | null = null
   private modeIconMapId = 0
+  private mapNames: Map<number, string> | null = null
+  private mapIcons: Map<number, string> | null = null
   // Live Client Data reports skinID as 0 even when a skin is equipped, so we remember the skin
   // the local player picked in champ select and reuse it for the in-game tile.
   private lastSkin: { championId: number; skinId: number } | null = null
@@ -166,22 +168,8 @@ export class PresenceManager {
       if (mapId && mapId !== this.modeIconMapId) {
         this.modeIconMapId = mapId
         changed = true
-        try {
-          const map = await client.request<{ name?: string; assets?: Record<string, string> }>(
-            'GET',
-            `/lol-maps/v2/map/${mapId}`
-          )
-          const asset = map?.assets?.['game-select-icon-default']
-          this.modeIcon = asset ? modeIconUrl(asset) : null
-          this.mapName = map?.name ?? null
-          log(
-            `[rpc] map ${mapId} (${this.mapName ?? '?'}) asset=${asset ?? 'MISSING'} keys=[${Object.keys(map?.assets ?? {}).join(',')}]`
-          )
-        } catch (error) {
-          this.modeIcon = null
-          this.mapName = null
-          log(`[rpc] map ${mapId} fetch FAILED: ${(error as Error).message}`)
-        }
+        await this.resolveMap(client, mapId)
+        log(`[rpc] map ${mapId} (${this.mapName ?? '?'}) icon=${this.modeIcon ?? 'MISSING'}`)
       }
 
       if (changed) {
@@ -191,6 +179,43 @@ export class PresenceManager {
       }
     } catch {
       // Not in a lobby (solo queue dodge etc.): leave as-is.
+    }
+  }
+
+  /**
+   * Sets mapName + modeIcon for a map id from the client's static game data. The old
+   * /lol-maps/v2/map/{id} endpoint 404s, so we read maps.json (names) and map-assets.json
+   * (the game-select mode icon), both cached for the session.
+   */
+  private async resolveMap(client: LcuClient, mapId: number): Promise<void> {
+    try {
+      if (!this.mapNames || !this.mapIcons) {
+        const [maps, assets] = await Promise.all([
+          client.request<{ id: number; name?: string }[]>(
+            'GET',
+            '/lol-game-data/assets/v1/maps.json'
+          ),
+          client.request<Record<string, { 'game-select-icon-default'?: string }[]>>(
+            'GET',
+            '/lol-game-data/assets/v1/map-assets/map-assets.json'
+          )
+        ])
+        this.mapNames = new Map((maps ?? []).map((m) => [m.id, m.name ?? '']))
+        const icons = new Map<number, string>()
+        for (const [id, configs] of Object.entries(assets ?? {})) {
+          const path = configs?.[0]?.['game-select-icon-default']
+          if (typeof path === 'string' && path) icons.set(Number(id), modeIconUrl(path))
+        }
+        this.mapIcons = icons
+      }
+      this.mapName = this.mapNames.get(mapId) || null
+      this.modeIcon = this.mapIcons.get(mapId) ?? null
+    } catch (error) {
+      this.mapNames = null // let a later lobby retry the fetch
+      this.mapIcons = null
+      this.mapName = null
+      this.modeIcon = null
+      log(`[rpc] map assets fetch failed: ${(error as Error).message}`)
     }
   }
 
