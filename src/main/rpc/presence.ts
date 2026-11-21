@@ -203,7 +203,12 @@ export class PresenceManager {
         this.mapNames = new Map((maps ?? []).map((m) => [m.id, m.name ?? '']))
         const icons = new Map<number, string>()
         for (const [id, configs] of Object.entries(assets ?? {})) {
-          const path = configs?.[0]?.assets?.['game-select-icon-default']
+          const a = configs?.[0]?.assets ?? {}
+          // Prefer the full-colour "hover" tile (brightest), then "active", then the dark default.
+          const path =
+            a['game-select-icon-hover'] ||
+            a['game-select-icon-active'] ||
+            a['game-select-icon-default']
           if (typeof path === 'string' && path) icons.set(Number(id), modeIconUrl(path))
         }
         this.mapIcons = icons
