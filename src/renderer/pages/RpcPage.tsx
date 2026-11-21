@@ -113,7 +113,6 @@ export function RpcPage() {
   if (!settings) return null
   const s = STATUS[status.state]
   const hasBundled = BUNDLED_APP_ID !== ''
-  const needsAppId = settings.enabled && !settings.appId && !hasBundled
 
   return (
     <div className="mx-auto max-w-[760px] space-y-4">
@@ -132,20 +131,6 @@ export function RpcPage() {
           enabled={settings.enabled}
           onToggle={(enabled) => save({ ...settings, enabled })}
         />
-        <Field
-          label={hasBundled ? 'Custom Application ID (optional)' : 'Discord Application ID'}
-          value={settings.appId}
-          placeholder={
-            hasBundled ? 'Leave empty to use the built-in Kali app' : 'Paste your Discord application ID'
-          }
-          onChange={(appId) => save({ ...settings, appId: appId.trim() })}
-          mono
-        />
-        {needsAppId && (
-          <div className="pb-3.5 text-[11px] text-warning">
-            Rich Presence needs an Application ID — follow the setup steps below.
-          </div>
-        )}
       </Section>
 
       <Section title="What to show">
