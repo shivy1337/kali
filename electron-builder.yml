@@ -14,6 +14,10 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
+  # Start Menu shortcut makes it searchable as "Kali"; the assisted installer lets the user pick
+  # whether to create the desktop shortcut.
+  createStartMenuShortcut: true
+  createDesktopShortcut: true
   shortcutName: Kali
   artifactName: Kali-Setup-${version}.${ext}
 # Publishing target is inferred from the git remote in CI (electron-builder --publish always).
