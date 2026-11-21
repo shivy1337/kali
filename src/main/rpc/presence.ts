@@ -195,7 +195,7 @@ export class PresenceManager {
             'GET',
             '/lol-game-data/assets/v1/maps.json'
           ),
-          client.request<Record<string, { 'game-select-icon-default'?: string }[]>>(
+          client.request<Record<string, { assets?: Record<string, string> }[]>>(
             'GET',
             '/lol-game-data/assets/v1/map-assets/map-assets.json'
           )
@@ -203,7 +203,7 @@ export class PresenceManager {
         this.mapNames = new Map((maps ?? []).map((m) => [m.id, m.name ?? '']))
         const icons = new Map<number, string>()
         for (const [id, configs] of Object.entries(assets ?? {})) {
-          const path = configs?.[0]?.['game-select-icon-default']
+          const path = configs?.[0]?.assets?.['game-select-icon-default']
           if (typeof path === 'string' && path) icons.set(Number(id), modeIconUrl(path))
         }
         this.mapIcons = icons
