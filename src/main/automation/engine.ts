@@ -51,9 +51,7 @@ export class AutomationEngine {
   private cooldownUntil = 0
   private rejoining = false
 
-  constructor(private readonly opts: AutomationEngineOptions) {
-    this.syncAcceptPoll()
-  }
+  constructor(private readonly opts: AutomationEngineOptions) {}
 
   private get queue(): AutomationSettings['queue'] {
     return this.opts.getSettings().queue
@@ -66,6 +64,7 @@ export class AutomationEngine {
   /** Client went away: drop all timers and pause state. */
   reset(): void {
     this.clearTimer('acceptTimer')
+    this.stopAcceptPoll()
     this.clearTimer('requeueTimer')
     this.clearTimer('pauseTimer')
     this.stopRestartPoll()
@@ -77,8 +76,10 @@ export class AutomationEngine {
 
   /** The user changed a setting: cancel anything that is now disabled. */
   onSettingsChanged(): void {
-    if (!this.queue.autoAccept.enabled) this.clearTimer('acceptTimer')
-    this.syncAcceptPoll()
+    if (!this.queue.autoAccept.enabled) {
+      this.clearTimer('acceptTimer')
+      this.stopAcceptPoll()
+    }
     if (!this.queue.queueAgain.enabled) this.clearTimer('requeueTimer')
     if (!this.queue.pauseAfterDodge.enabled) this.clearPause()
     this.syncRestartPoll()
@@ -115,7 +116,18 @@ export class AutomationEngine {
 
   onPhase(previous: GamePhase, next: GamePhase): void {
     if (GAME_PHASES.has(previous) && next === 'Lobby') this.scheduleRequeue()
-    if (next !== 'ReadyCheck') this.clearTimer('acceptTimer')
+    if (next === 'ReadyCheck') {
+      // Drive auto-accept off the phase event (which arrives reliably), the way steele123/reveal
+      // does — the dedicated ready-check push event can be dropped. Poll the ready-check during
+      // the window too, so a single missed response can't stop it.
+      if (this.queue.autoAccept.enabled) {
+        void this.pollReadyCheck()
+        this.startAcceptPoll()
+      }
+    } else {
+      this.stopAcceptPoll()
+      this.clearTimer('acceptTimer')
+    }
   }
 
   /** A champ select ended in a dodge. */
@@ -210,15 +222,14 @@ export class AutomationEngine {
     }
   }
 
-  /**
-   * The ready-check event is only pushed over the socket; if that drops the message, auto-accept
-   * would silently never fire. So we also poll the ready-check endpoint while auto-accept is on.
-   */
-  private syncAcceptPoll(): void {
-    const want = this.queue.autoAccept.enabled
-    if (want && !this.acceptPoll) {
+  private startAcceptPoll(): void {
+    if (!this.acceptPoll) {
       this.acceptPoll = setInterval(() => void this.pollReadyCheck(), ACCEPT_POLL_MS)
-    } else if (!want && this.acceptPoll) {
+    }
+  }
+
+  private stopAcceptPoll(): void {
+    if (this.acceptPoll) {
       clearInterval(this.acceptPoll)
       this.acceptPoll = null
     }
